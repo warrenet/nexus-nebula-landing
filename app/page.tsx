@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type FeedEvent = {
   type: "info" | "success" | "warning" | "error" | "critique" | "synthesis";
@@ -8,9 +8,58 @@ type FeedEvent = {
   channel: "simple" | "advanced";
 };
 
+function isValidUrl(url: string) {
+  try {
+    const u = new URL(url);
+    return u.protocol === "http:" || u.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function buildMailto(email: string, subject: string, body: string) {
+  const s = encodeURIComponent(subject);
+  const b = encodeURIComponent(body);
+  return `mailto:${email}?subject=${s}&body=${b}`;
+}
+
 export default function Home() {
-  const gumroadUrl = process.env.NEXT_PUBLIC_GUMROAD_URL || "#";
+  // ✅ Your current waitlist contact email
+  // You can change this later in ONE spot.
+  const contactEmail = "contactwarrentrepp@gmail.com";
+
+  // ✅ Optional: if you later set a real Gumroad URL in .env.local, CTAs will auto-route there.
+  // .env.local -> NEXT_PUBLIC_GUMROAD_URL=https://your-real-gumroad-link
+  const envGumroadUrl = (process.env.NEXT_PUBLIC_GUMROAD_URL || "").trim();
+  const hasGumroad = isValidUrl(envGumroadUrl);
+
   const [showFullDetails, setShowFullDetails] = useState(false);
+  const [waitlistOpen, setWaitlistOpen] = useState(false);
+  const [copied, setCopied] = useState<null | "email" | "template">(null);
+
+  const proHref = hasGumroad ? envGumroadUrl : "#waitlist";
+
+  const waitlistTemplate = useMemo(() => {
+    return [
+      "Hey Warren,",
+      "",
+      "I'd like Nexus Nebula Pro access.",
+      "",
+      "Name:",
+      "Use-case:",
+      "What I want Pro to solve:",
+      "",
+      "Thanks!",
+    ].join("\n");
+  }, []);
+
+  const mailtoHref = useMemo(() => {
+    return buildMailto(
+      contactEmail,
+      "Nexus Nebula Pro Waitlist",
+      waitlistTemplate
+    );
+  }, [contactEmail, waitlistTemplate]);
 
   const allEvents: FeedEvent[] = useMemo(
     () => [
@@ -19,8 +68,7 @@ export default function Home() {
       { type: "warning", message: "Constraint check • keeping output safe + readable", channel: "simple" },
       { type: "success", message: "Synthesis phase • clear summary forming", channel: "simple" },
 
-      // Full Details (advanced)
-      { type: "critique", message: "Risk scan: potential hallucination vector flagged (handled)", channel: "advanced" },
+      { type: "critique", message: "Risk scan: possible hallucination vector flagged (handled)", channel: "advanced" },
       { type: "critique", message: "Quality gate: output trimmed for clarity + usefulness", channel: "advanced" },
       { type: "synthesis", message: "Final summary: actionable plan + next steps produced", channel: "advanced" },
     ],
@@ -49,8 +97,63 @@ export default function Home() {
     }
   };
 
+  const openWaitlist = () => {
+    setCopied(null);
+    setWaitlistOpen(true);
+  };
+
+  const closeWaitlist = () => {
+    setCopied(null);
+    setWaitlistOpen(false);
+  };
+
+  const copyToClipboard = async (kind: "email" | "template") => {
+    try {
+      const text = kind === "email" ? contactEmail : waitlistTemplate;
+      await navigator.clipboard.writeText(text);
+      setCopied(kind);
+      window.setTimeout(() => setCopied(null), 1400);
+    } catch {
+      setCopied(null);
+    }
+  };
+
+  // ✅ Quality-of-life enhancement: ESC closes modal + prevent background scroll while modal open
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeWaitlist();
+    };
+
+    if (waitlistOpen) {
+      document.addEventListener("keydown", onKeyDown);
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = "";
+    };
+  }, [waitlistOpen]);
+
   return (
-    <main className="min-h-screen bg-zinc-950 text-zinc-50">
+    <main className="min-h-screen scroll-smooth bg-zinc-950 text-zinc-50">
+      {/* Announcement bar (safe conversion bump) */}
+      <div className="border-b border-zinc-800/60 bg-gradient-to-r from-indigo-500/10 to-fuchsia-500/10">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-6 py-2">
+          <p className="text-xs text-zinc-300">
+            Waitlist is open • Early adopters get the cleanest onboarding
+          </p>
+          <button
+            onClick={openWaitlist}
+            className="rounded-full border border-zinc-800 bg-zinc-900/20 px-3 py-1 text-xs text-zinc-200 hover:bg-zinc-900"
+          >
+            Join waitlist
+          </button>
+        </div>
+      </div>
+
       {/* Sticky Top Bar */}
       <header className="sticky top-0 z-50 border-b border-zinc-800/60 bg-zinc-950/70 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
@@ -69,8 +172,16 @@ export default function Home() {
             >
               See Demo Flow
             </a>
+
+            {/* ✅ No-404 CTA: Gumroad if present, otherwise opens waitlist modal */}
             <a
-              href={gumroadUrl}
+              href={proHref}
+              onClick={(e) => {
+                if (!hasGumroad) {
+                  e.preventDefault();
+                  openWaitlist();
+                }
+              }}
               className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-zinc-950 hover:bg-zinc-200"
             >
               Get Pro
@@ -88,7 +199,6 @@ export default function Home() {
               Real-time streaming • Simple View by default • Full Details toggle
             </p>
 
-            {/* Headline: keeps "watch work" together */}
             <h1 className="mt-5 text-4xl font-semibold leading-tight tracking-tight sm:text-5xl">
               The AI Team you can{" "}
               <span className="inline-flex items-baseline whitespace-nowrap">
@@ -104,6 +214,7 @@ export default function Home() {
               without getting blasted by raw internals.
             </p>
 
+            {/* Mini value grid */}
             <div className="mt-6 grid gap-3 text-sm text-zinc-300 sm:grid-cols-2">
               <div className="rounded-2xl border border-zinc-800 bg-zinc-900/20 p-4">
                 <div className="font-semibold text-zinc-100">Simple View (default)</div>
@@ -116,12 +227,13 @@ export default function Home() {
             </div>
 
             <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:items-center">
-              <a
-                href={gumroadUrl}
+              <button
+                onClick={openWaitlist}
                 className="inline-flex items-center justify-center rounded-xl bg-white px-5 py-3 text-sm font-semibold text-zinc-950 hover:bg-zinc-200"
               >
-                Try Demo → Upgrade to Pro
-              </a>
+                Get Pro (Waitlist)
+              </button>
+
               <a
                 href="#pricing"
                 className="inline-flex items-center justify-center rounded-xl border border-zinc-800 px-5 py-3 text-sm text-zinc-200 hover:bg-zinc-900"
@@ -162,10 +274,7 @@ export default function Home() {
 
             <div className="mt-4 space-y-3">
               {visibleEvents.map((e, i) => (
-                <div
-                  key={i}
-                  className="rounded-xl border border-zinc-800 bg-zinc-950/40 px-4 py-3"
-                >
+                <div key={i} className="rounded-xl border border-zinc-800 bg-zinc-950/40 px-4 py-3">
                   <div className="flex items-center justify-between">
                     <div className={`rounded-full border px-2 py-0.5 text-[11px] ${badgeClasses(e.type)}`}>
                       {e.type.toUpperCase()}
@@ -188,7 +297,7 @@ export default function Home() {
       </section>
 
       {/* FEATURES */}
-      <section id="features" className="mx-auto max-w-6xl px-6 py-14">
+      <section className="mx-auto max-w-6xl px-6 py-14">
         <h2 className="text-2xl font-semibold tracking-tight">What you get</h2>
         <p className="mt-2 max-w-2xl text-zinc-300">
           Clean by default, deep when you want it. Built for non-technical clarity first.
@@ -227,31 +336,23 @@ export default function Home() {
           <div>
             <h2 className="text-2xl font-semibold tracking-tight">Pricing & tiers</h2>
             <p className="mt-2 max-w-2xl text-zinc-300">
-              Start with Demo. Upgrade when you feel the difference. Gumroad-friendly and simple.
+              Gumroad is coming soon. For now, Pro is waitlist-only so early users get the best onboarding.
             </p>
           </div>
 
-          <a
-            href={gumroadUrl}
+          <button
+            onClick={openWaitlist}
             className="inline-flex items-center justify-center rounded-xl bg-white px-5 py-3 text-sm font-semibold text-zinc-950 hover:bg-zinc-200"
           >
-            View Pro on Gumroad
-          </a>
+            Join waitlist
+          </button>
         </div>
 
         <div className="mt-8 grid gap-4 lg:grid-cols-3">
-          {/* Demo */}
           <div className="rounded-2xl border border-zinc-800 bg-zinc-900/20 p-6">
             <div className="text-sm font-semibold text-zinc-100">Demo</div>
             <div className="mt-2 text-3xl font-semibold">Free</div>
             <div className="mt-2 text-sm text-zinc-400">Try the live feed + core flow.</div>
-
-            <ul className="mt-5 space-y-2 text-sm text-zinc-300">
-              <li>• Simple View default</li>
-              <li>• Watch phases stream</li>
-              <li>• Proof-of-value feel</li>
-            </ul>
-
             <a
               href="#demo"
               className="mt-6 inline-flex w-full items-center justify-center rounded-xl border border-zinc-800 px-4 py-3 text-sm text-zinc-200 hover:bg-zinc-900"
@@ -260,158 +361,88 @@ export default function Home() {
             </a>
           </div>
 
-          {/* Pro */}
           <div className="rounded-2xl border border-indigo-700/40 bg-gradient-to-b from-indigo-950/30 to-zinc-950 p-6 shadow-xl shadow-indigo-500/10">
-            <div className="flex items-center justify-between">
-              <div className="text-sm font-semibold text-zinc-100">Pro</div>
-              <span className="rounded-full border border-indigo-800/40 bg-indigo-950/30 px-3 py-1 text-xs text-indigo-200">
-                Recommended
-              </span>
-            </div>
-
-            <div className="mt-2 text-3xl font-semibold">Unlock</div>
-            <div className="mt-2 text-sm text-zinc-400">The spine that makes it sticky.</div>
-
-            <ul className="mt-5 space-y-2 text-sm text-zinc-300">
-              <li>• Persistence (history + replay)</li>
-              <li>• User-scoped traces</li>
-              <li>• Cleaner summaries + payoff panel</li>
-              <li>• Better support UX (copy debug)</li>
-            </ul>
-
-            <a
-              href={gumroadUrl}
+            <div className="text-sm font-semibold text-zinc-100">Pro</div>
+            <div className="mt-2 text-3xl font-semibold">Waitlist</div>
+            <div className="mt-2 text-sm text-zinc-400">Unlock the spine that makes it sticky.</div>
+            <button
+              onClick={openWaitlist}
               className="mt-6 inline-flex w-full items-center justify-center rounded-xl bg-white px-4 py-3 text-sm font-semibold text-zinc-950 hover:bg-zinc-200"
             >
-              Get Pro
-            </a>
+              Request Access
+            </button>
           </div>
 
-          {/* Pro + Packs */}
           <div className="rounded-2xl border border-zinc-800 bg-zinc-900/20 p-6">
             <div className="text-sm font-semibold text-zinc-100">Pro + Packs</div>
             <div className="mt-2 text-3xl font-semibold">Best value</div>
             <div className="mt-2 text-sm text-zinc-400">Templates, missions, upgrades.</div>
-
-            <ul className="mt-5 space-y-2 text-sm text-zinc-300">
-              <li>• Everything in Pro</li>
-              <li>• Template packs (repeatable wins)</li>
-              <li>• New missions + updates</li>
-              <li>• Roadmap drops</li>
-            </ul>
-
-            <a
-              href={gumroadUrl}
+            <button
+              onClick={openWaitlist}
               className="mt-6 inline-flex w-full items-center justify-center rounded-xl border border-zinc-800 px-4 py-3 text-sm text-zinc-200 hover:bg-zinc-900"
             >
-              Get Pro + Packs
+              Join Waitlist
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* DEMO */}
+      <section id="demo" className="mx-auto max-w-6xl px-6 py-14">
+        <div className="rounded-3xl border border-zinc-800 bg-gradient-to-br from-zinc-900/40 to-zinc-950 p-8">
+          <h2 className="text-2xl font-semibold tracking-tight">Demo flow in 10 seconds</h2>
+          <p className="mt-2 max-w-2xl text-zinc-300">
+            The “aha”: it feels alive, but stays readable.
+          </p>
+
+          <ol className="mt-4 space-y-2 text-sm text-zinc-300">
+            <li>1) Start mission</li>
+            <li>2) Get traceId instantly</li>
+            <li>3) Watch live events stream</li>
+            <li>4) Toggle Full Details when needed</li>
+            <li>5) Walk away with a usable synthesis</li>
+          </ol>
+
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+            <button
+              onClick={openWaitlist}
+              className="inline-flex items-center justify-center rounded-xl bg-white px-5 py-3 text-sm font-semibold text-zinc-950 hover:bg-zinc-200"
+            >
+              Join waitlist
+            </button>
+
+            <a
+              href="#pricing"
+              className="inline-flex items-center justify-center rounded-xl border border-zinc-800 px-5 py-3 text-sm text-zinc-200 hover:bg-zinc-900"
+            >
+              View tiers
             </a>
           </div>
         </div>
       </section>
 
-      {/* DEMO FLOW */}
-      <section id="demo" className="mx-auto max-w-6xl px-6 py-14">
-        <div className="rounded-3xl border border-zinc-800 bg-gradient-to-br from-zinc-900/40 to-zinc-950 p-8">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <h2 className="text-2xl font-semibold tracking-tight">Demo flow in 10 seconds</h2>
-              <p className="mt-2 max-w-2xl text-zinc-300">
-                This is the “aha”: it feels alive, but stays readable.
-              </p>
-
-              <ol className="mt-4 space-y-2 text-sm text-zinc-300">
-                <li>1) Start mission</li>
-                <li>2) Get traceId instantly</li>
-                <li>3) Watch live events stream</li>
-                <li>4) Toggle Full Details when needed</li>
-                <li>5) Walk away with a usable synthesis</li>
-              </ol>
-
-              <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-                <a
-                  href={gumroadUrl}
-                  className="inline-flex items-center justify-center rounded-xl bg-white px-5 py-3 text-sm font-semibold text-zinc-950 hover:bg-zinc-200"
-                >
-                  Try Demo → Upgrade to Pro
-                </a>
-                <a
-                  href="#faq"
-                  className="inline-flex items-center justify-center rounded-xl border border-zinc-800 px-5 py-3 text-sm text-zinc-200 hover:bg-zinc-900"
-                >
-                  FAQ
-                </a>
-              </div>
-            </div>
-
-            {/* Video/GIF placeholder */}
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/40 p-4 lg:w-[420px]">
-              <div className="flex items-center justify-between">
-                <div className="text-sm font-semibold text-zinc-100">Demo video (placeholder)</div>
-                <div className="text-xs text-zinc-500">60–90s recommended</div>
-              </div>
-              <div className="mt-3 aspect-video w-full rounded-xl border border-zinc-800 bg-zinc-900/30" />
-              <p className="mt-3 text-xs text-zinc-400">
-                Swap this box for a GIF or short clip once your flow is final. Conversions love video.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* FAQ */}
-      <section id="faq" className="mx-auto max-w-6xl px-6 py-14">
-        <h2 className="text-2xl font-semibold tracking-tight">FAQ</h2>
-
-        <div className="mt-6 grid gap-4 md:grid-cols-2">
-          {[
-            {
-              q: "Is this friendly for non-technical users?",
-              a: "Yes. Simple View is the default. Full Details is optional.",
-            },
-            {
-              q: "Is this just a UI toy?",
-              a: "No. The point is clarity + trust: see the process, then get the synthesis.",
-            },
-            {
-              q: "What makes it different?",
-              a: "You can watch the AI Team work in real time instead of trusting a black box blob.",
-            },
-            {
-              q: "What does Pro add?",
-              a: "Persistence, replay, better summaries, user-scoped traces, and template pack upgrades as they ship.",
-            },
-          ].map((item, i) => (
-            <div key={i} className="rounded-2xl border border-zinc-800 bg-zinc-900/20 p-6">
-              <div className="text-sm font-semibold">{item.q}</div>
-              <div className="mt-2 text-sm leading-relaxed text-zinc-300">{item.a}</div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Footer CTA */}
+      {/* Footer */}
       <footer className="border-t border-zinc-800/60">
         <div className="mx-auto flex max-w-6xl flex-col gap-3 px-6 py-10 sm:flex-row sm:items-center sm:justify-between">
           <div className="text-sm text-zinc-400">
             © {new Date().getFullYear()} Nexus Nebula • Built by warrenet
           </div>
-          <a
-            href={gumroadUrl}
+          <button
+            onClick={openWaitlist}
             className="inline-flex items-center justify-center rounded-xl bg-white px-5 py-3 text-sm font-semibold text-zinc-950 hover:bg-zinc-200"
           >
-            Get Pro
-          </a>
+            Get Pro (Waitlist)
+          </button>
         </div>
       </footer>
 
-      {/* Sticky Bottom CTA */}
+      {/* Sticky Bottom CTA (safe conversion bump) */}
       <div className="pointer-events-none fixed bottom-4 left-0 right-0 z-50">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 rounded-2xl border border-zinc-800 bg-zinc-950/85 px-4 py-3 shadow-2xl shadow-black/40 backdrop-blur pointer-events-auto mx-4 sm:mx-auto">
+        <div className="pointer-events-auto mx-4 flex max-w-6xl items-center justify-between gap-3 rounded-2xl border border-zinc-800 bg-zinc-950/85 px-4 py-3 shadow-2xl shadow-black/40 backdrop-blur sm:mx-auto">
           <div className="min-w-0">
             <div className="truncate text-sm font-semibold text-zinc-100">Nexus Nebula</div>
             <div className="truncate text-xs text-zinc-400">
-              Demo-first. Upgrade when you feel the difference.
+              Waitlist is open • Gumroad drops soon
             </div>
           </div>
 
@@ -423,15 +454,92 @@ export default function Home() {
             >
               {showFullDetails ? "Full Details: ON" : "Simple View: ON"}
             </button>
-            <a
-              href={gumroadUrl}
+
+            <button
+              onClick={openWaitlist}
               className="inline-flex items-center justify-center rounded-xl bg-white px-4 py-2 text-sm font-semibold text-zinc-950 hover:bg-zinc-200"
             >
-              Get Pro
-            </a>
+              Join
+            </button>
           </div>
         </div>
       </div>
+
+      {/* Waitlist Modal */}
+      {waitlistOpen && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 px-4"
+          onClick={closeWaitlist}
+        >
+          <div
+            className="w-full max-w-lg rounded-2xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-lg font-semibold">Join the Pro waitlist</div>
+                <div className="mt-1 text-sm text-zinc-400">
+                  Gumroad isn’t live yet. For now, request access directly.
+                </div>
+              </div>
+
+              <button
+                onClick={closeWaitlist}
+                className="rounded-lg border border-zinc-800 bg-zinc-900/30 px-3 py-1.5 text-xs text-zinc-200 hover:bg-zinc-900"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="mt-5 rounded-xl border border-zinc-800 bg-zinc-900/20 p-4">
+              <div className="text-xs text-zinc-400">Contact</div>
+              <div className="mt-1 flex items-center justify-between gap-2">
+                <div className="truncate text-sm font-semibold text-zinc-100">{contactEmail}</div>
+                <button
+                  onClick={() => copyToClipboard("email")}
+                  className="rounded-lg border border-zinc-800 bg-zinc-900/30 px-3 py-1.5 text-xs text-zinc-200 hover:bg-zinc-900"
+                >
+                  {copied === "email" ? "Copied" : "Copy email"}
+                </button>
+              </div>
+
+              <div className="mt-4 text-xs text-zinc-400">Request template</div>
+              <div className="mt-1 flex items-center justify-between gap-2">
+                <div className="truncate text-sm text-zinc-300">
+                  “I’d like Nexus Nebula Pro access…”
+                </div>
+                <button
+                  onClick={() => copyToClipboard("template")}
+                  className="rounded-lg border border-zinc-800 bg-zinc-900/30 px-3 py-1.5 text-xs text-zinc-200 hover:bg-zinc-900"
+                >
+                  {copied === "template" ? "Copied" : "Copy template"}
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <a
+                href={mailtoHref}
+                className="inline-flex items-center justify-center rounded-xl bg-white px-4 py-2 text-sm font-semibold text-zinc-950 hover:bg-zinc-200"
+              >
+                Email Warren
+              </a>
+
+              <button
+                onClick={closeWaitlist}
+                className="inline-flex items-center justify-center rounded-xl border border-zinc-800 px-4 py-2 text-sm text-zinc-200 hover:bg-zinc-900"
+              >
+                Not now
+              </button>
+            </div>
+
+            <p className="mt-4 text-xs text-zinc-500">
+              Tip: when Gumroad is ready, add <span className="text-zinc-300">NEXT_PUBLIC_GUMROAD_URL</span> and all “Get Pro”
+              buttons automatically route there.
+            </p>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

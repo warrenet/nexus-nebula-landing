@@ -24,20 +24,22 @@ function buildMailto(email: string, subject: string, body: string) {
 }
 
 export default function Home() {
-  // ✅ Your current waitlist contact email
-  // You can change this later in ONE spot.
+  // ✅ Your current waitlist contact email (easy to change later)
   const contactEmail = "contactwarrentrepp@gmail.com";
 
-  // ✅ Optional: if you later set a real Gumroad URL in .env.local, CTAs will auto-route there.
-  // .env.local -> NEXT_PUBLIC_GUMROAD_URL=https://your-real-gumroad-link
+  // ✅ Optional env vars (add later when ready)
+  // NEXT_PUBLIC_GUMROAD_URL=https://...
+  // NEXT_PUBLIC_WAITLIST_URL=https://...  (Google Form / Typeform / whatever)
   const envGumroadUrl = (process.env.NEXT_PUBLIC_GUMROAD_URL || "").trim();
+  const envWaitlistUrl = (process.env.NEXT_PUBLIC_WAITLIST_URL || "").trim();
+
   const hasGumroad = isValidUrl(envGumroadUrl);
+  const hasWaitlistForm = isValidUrl(envWaitlistUrl);
 
   const [showFullDetails, setShowFullDetails] = useState(false);
   const [waitlistOpen, setWaitlistOpen] = useState(false);
-  const [copied, setCopied] = useState<null | "email" | "template">(null);
-
-  const proHref = hasGumroad ? envGumroadUrl : "#waitlist";
+  const [copied, setCopied] = useState<null | "email" | "template" | "link">(null);
+  const [faqOpen, setFaqOpen] = useState<number | null>(0);
 
   const waitlistTemplate = useMemo(() => {
     return [
@@ -54,11 +56,7 @@ export default function Home() {
   }, []);
 
   const mailtoHref = useMemo(() => {
-    return buildMailto(
-      contactEmail,
-      "Nexus Nebula Pro Waitlist",
-      waitlistTemplate
-    );
+    return buildMailto(contactEmail, "Nexus Nebula Pro Waitlist", waitlistTemplate);
   }, [contactEmail, waitlistTemplate]);
 
   const allEvents: FeedEvent[] = useMemo(
@@ -107,9 +105,13 @@ export default function Home() {
     setWaitlistOpen(false);
   };
 
-  const copyToClipboard = async (kind: "email" | "template") => {
+  const copyToClipboard = async (kind: "email" | "template" | "link") => {
     try {
-      const text = kind === "email" ? contactEmail : waitlistTemplate;
+      let text = "";
+      if (kind === "email") text = contactEmail;
+      if (kind === "template") text = waitlistTemplate;
+      if (kind === "link") text = window.location.href;
+
       await navigator.clipboard.writeText(text);
       setCopied(kind);
       window.setTimeout(() => setCopied(null), 1400);
@@ -118,7 +120,12 @@ export default function Home() {
     }
   };
 
-  // ✅ Quality-of-life enhancement: ESC closes modal + prevent background scroll while modal open
+  const openWaitlistForm = () => {
+    if (!hasWaitlistForm) return;
+    window.open(envWaitlistUrl, "_blank", "noopener,noreferrer");
+  };
+
+  // ✅ QOL: ESC closes modal + prevents background scroll when modal open
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") closeWaitlist();
@@ -135,22 +142,59 @@ export default function Home() {
       document.removeEventListener("keydown", onKeyDown);
       document.body.style.overflow = "";
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [waitlistOpen]);
+
+  // ✅ CTA routing:
+  // - If Gumroad exists -> go there
+  // - Else open waitlist modal (no 404)
+  const onProClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    if (hasGumroad) return;
+    e.preventDefault();
+    openWaitlist();
+  };
+
+  const faq = [
+    {
+      q: "What is Nexus Nebula?",
+      a: "A web/PWA experience that streams an AI “team” working in phases. Simple view by default, full details when you want them.",
+    },
+    {
+      q: "Is this for non-technical people?",
+      a: "Yes. The whole point is clarity. You can keep it calm and readable, and only toggle deeper details when needed.",
+    },
+    {
+      q: "What does Pro unlock?",
+      a: "The Pro spine: history + replay, user-scoped traces, proof-of-value summaries, and template packs (evolving).",
+    },
+    {
+      q: "Why waitlist instead of buying now?",
+      a: "Gumroad is being set up. Waitlist ensures early users get smooth onboarding and the best version of the experience.",
+    },
+  ];
 
   return (
     <main className="min-h-screen scroll-smooth bg-zinc-950 text-zinc-50">
-      {/* Announcement bar (safe conversion bump) */}
+      {/* Announcement bar */}
       <div className="border-b border-zinc-800/60 bg-gradient-to-r from-indigo-500/10 to-fuchsia-500/10">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-6 py-2">
           <p className="text-xs text-zinc-300">
             Waitlist is open • Early adopters get the cleanest onboarding
           </p>
-          <button
-            onClick={openWaitlist}
-            className="rounded-full border border-zinc-800 bg-zinc-900/20 px-3 py-1 text-xs text-zinc-200 hover:bg-zinc-900"
-          >
-            Join waitlist
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => copyToClipboard("link")}
+              className="rounded-full border border-zinc-800 bg-zinc-900/20 px-3 py-1 text-xs text-zinc-200 hover:bg-zinc-900"
+            >
+              {copied === "link" ? "Copied link" : "Copy link"}
+            </button>
+            <button
+              onClick={openWaitlist}
+              className="rounded-full border border-zinc-800 bg-zinc-900/20 px-3 py-1 text-xs text-zinc-200 hover:bg-zinc-900"
+            >
+              Join waitlist
+            </button>
+          </div>
         </div>
       </div>
 
@@ -173,15 +217,9 @@ export default function Home() {
               See Demo Flow
             </a>
 
-            {/* ✅ No-404 CTA: Gumroad if present, otherwise opens waitlist modal */}
             <a
-              href={proHref}
-              onClick={(e) => {
-                if (!hasGumroad) {
-                  e.preventDefault();
-                  openWaitlist();
-                }
-              }}
+              href={hasGumroad ? envGumroadUrl : "#waitlist"}
+              onClick={onProClick}
               className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-zinc-950 hover:bg-zinc-200"
             >
               Get Pro
@@ -214,11 +252,10 @@ export default function Home() {
               without getting blasted by raw internals.
             </p>
 
-            {/* Mini value grid */}
             <div className="mt-6 grid gap-3 text-sm text-zinc-300 sm:grid-cols-2">
               <div className="rounded-2xl border border-zinc-800 bg-zinc-900/20 p-4">
                 <div className="font-semibold text-zinc-100">Simple View (default)</div>
-                <div className="mt-1 text-zinc-400">Clean + calm output designed for clarity.</div>
+                <div className="mt-1 text-zinc-400">Calm, readable output designed for clarity.</div>
               </div>
               <div className="rounded-2xl border border-zinc-800 bg-zinc-900/20 p-4">
                 <div className="font-semibold text-zinc-100">Full Details (optional)</div>
@@ -234,12 +271,12 @@ export default function Home() {
                 Get Pro (Waitlist)
               </button>
 
-              <a
-                href="#pricing"
+              <button
+                onClick={() => copyToClipboard("link")}
                 className="inline-flex items-center justify-center rounded-xl border border-zinc-800 px-5 py-3 text-sm text-zinc-200 hover:bg-zinc-900"
               >
-                Pricing & tiers
-              </a>
+                {copied === "link" ? "Link copied" : "Copy share link"}
+              </button>
             </div>
 
             <div className="mt-6 flex flex-wrap items-center gap-2 text-xs text-zinc-400">
@@ -296,165 +333,88 @@ export default function Home() {
         </div>
       </section>
 
-      {/* FEATURES */}
+      {/* “Video” placeholder (fast credibility boost) */}
       <section className="mx-auto max-w-6xl px-6 py-14">
-        <h2 className="text-2xl font-semibold tracking-tight">What you get</h2>
-        <p className="mt-2 max-w-2xl text-zinc-300">
-          Clean by default, deep when you want it. Built for non-technical clarity first.
-        </p>
-
-        <div className="mt-8 grid gap-4 md:grid-cols-2">
-          {[
-            {
-              title: "Real-time streaming timeline",
-              desc: "Watch an AI Team collaborate phase-by-phase instead of waiting on a mystery blob.",
-            },
-            {
-              title: "Simple View (default)",
-              desc: "A calm UI normal humans can use without feeling like they opened a cockpit.",
-            },
-            {
-              title: "Full Details toggle",
-              desc: "Turn on critique + deeper events when you want transparency.",
-            },
-            {
-              title: "Demo-first funnel",
-              desc: "Try it immediately, then unlock Pro when it proves its value.",
-            },
-          ].map((f, i) => (
-            <div key={i} className="rounded-2xl border border-zinc-800 bg-zinc-900/20 p-6">
-              <div className="text-base font-semibold">{f.title}</div>
-              <div className="mt-2 text-sm leading-relaxed text-zinc-300">{f.desc}</div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* PRICING */}
-      <section id="pricing" className="mx-auto max-w-6xl px-6 py-14">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h2 className="text-2xl font-semibold tracking-tight">Pricing & tiers</h2>
-            <p className="mt-2 max-w-2xl text-zinc-300">
-              Gumroad is coming soon. For now, Pro is waitlist-only so early users get the best onboarding.
-            </p>
-          </div>
-
-          <button
-            onClick={openWaitlist}
-            className="inline-flex items-center justify-center rounded-xl bg-white px-5 py-3 text-sm font-semibold text-zinc-950 hover:bg-zinc-200"
-          >
-            Join waitlist
-          </button>
-        </div>
-
-        <div className="mt-8 grid gap-4 lg:grid-cols-3">
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/20 p-6">
-            <div className="text-sm font-semibold text-zinc-100">Demo</div>
-            <div className="mt-2 text-3xl font-semibold">Free</div>
-            <div className="mt-2 text-sm text-zinc-400">Try the live feed + core flow.</div>
-            <a
-              href="#demo"
-              className="mt-6 inline-flex w-full items-center justify-center rounded-xl border border-zinc-800 px-4 py-3 text-sm text-zinc-200 hover:bg-zinc-900"
-            >
-              Try Demo
-            </a>
-          </div>
-
-          <div className="rounded-2xl border border-indigo-700/40 bg-gradient-to-b from-indigo-950/30 to-zinc-950 p-6 shadow-xl shadow-indigo-500/10">
-            <div className="text-sm font-semibold text-zinc-100">Pro</div>
-            <div className="mt-2 text-3xl font-semibold">Waitlist</div>
-            <div className="mt-2 text-sm text-zinc-400">Unlock the spine that makes it sticky.</div>
-            <button
-              onClick={openWaitlist}
-              className="mt-6 inline-flex w-full items-center justify-center rounded-xl bg-white px-4 py-3 text-sm font-semibold text-zinc-950 hover:bg-zinc-200"
-            >
-              Request Access
-            </button>
-          </div>
-
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/20 p-6">
-            <div className="text-sm font-semibold text-zinc-100">Pro + Packs</div>
-            <div className="mt-2 text-3xl font-semibold">Best value</div>
-            <div className="mt-2 text-sm text-zinc-400">Templates, missions, upgrades.</div>
-            <button
-              onClick={openWaitlist}
-              className="mt-6 inline-flex w-full items-center justify-center rounded-xl border border-zinc-800 px-4 py-3 text-sm text-zinc-200 hover:bg-zinc-900"
-            >
-              Join Waitlist
-            </button>
-          </div>
-        </div>
-      </section>
-
-      {/* DEMO */}
-      <section id="demo" className="mx-auto max-w-6xl px-6 py-14">
         <div className="rounded-3xl border border-zinc-800 bg-gradient-to-br from-zinc-900/40 to-zinc-950 p-8">
-          <h2 className="text-2xl font-semibold tracking-tight">Demo flow in 10 seconds</h2>
+          <h2 className="text-2xl font-semibold tracking-tight">1-minute demo (coming)</h2>
           <p className="mt-2 max-w-2xl text-zinc-300">
-            The “aha”: it feels alive, but stays readable.
+            Drop a Loom or YouTube link here later. This section massively increases trust and conversion.
           </p>
 
-          <ol className="mt-4 space-y-2 text-sm text-zinc-300">
-            <li>1) Start mission</li>
-            <li>2) Get traceId instantly</li>
-            <li>3) Watch live events stream</li>
-            <li>4) Toggle Full Details when needed</li>
-            <li>5) Walk away with a usable synthesis</li>
-          </ol>
-
-          <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-            <button
-              onClick={openWaitlist}
-              className="inline-flex items-center justify-center rounded-xl bg-white px-5 py-3 text-sm font-semibold text-zinc-950 hover:bg-zinc-200"
-            >
-              Join waitlist
-            </button>
-
-            <a
-              href="#pricing"
-              className="inline-flex items-center justify-center rounded-xl border border-zinc-800 px-5 py-3 text-sm text-zinc-200 hover:bg-zinc-900"
-            >
-              View tiers
-            </a>
+          <div className="mt-6 grid gap-4 md:grid-cols-3">
+            {[
+              { k: "Instant traceId", v: "No waiting. Mission starts immediately." },
+              { k: "Streaming events", v: "See progress as it happens." },
+              { k: "Readable synthesis", v: "Walk away with something usable." },
+            ].map((x, i) => (
+              <div key={i} className="rounded-2xl border border-zinc-800 bg-zinc-900/20 p-5">
+                <div className="text-sm font-semibold text-zinc-100">{x.k}</div>
+                <div className="mt-2 text-sm text-zinc-300">{x.v}</div>
+              </div>
+            ))}
           </div>
+        </div>
+      </section>
+
+      {/* FAQ (conversion + clarity) */}
+      <section className="mx-auto max-w-6xl px-6 py-14">
+        <h2 className="text-2xl font-semibold tracking-tight">FAQ</h2>
+        <div className="mt-6 space-y-3">
+          {faq.map((item, idx) => {
+            const open = faqOpen === idx;
+            return (
+              <button
+                key={idx}
+                onClick={() => setFaqOpen(open ? null : idx)}
+                className="w-full rounded-2xl border border-zinc-800 bg-zinc-900/20 p-5 text-left hover:bg-zinc-900/30"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="text-sm font-semibold text-zinc-100">{item.q}</div>
+                  <div className="text-zinc-500">{open ? "–" : "+"}</div>
+                </div>
+                {open && <div className="mt-3 text-sm text-zinc-300">{item.a}</div>}
+              </button>
+            );
+          })}
         </div>
       </section>
 
       {/* Footer */}
       <footer className="border-t border-zinc-800/60">
         <div className="mx-auto flex max-w-6xl flex-col gap-3 px-6 py-10 sm:flex-row sm:items-center sm:justify-between">
-          <div className="text-sm text-zinc-400">
-            © {new Date().getFullYear()} Nexus Nebula • Built by warrenet
+          <div className="text-sm text-zinc-400">© {new Date().getFullYear()} Nexus Nebula • Built by warrenet</div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => copyToClipboard("link")}
+              className="rounded-xl border border-zinc-800 px-4 py-2 text-sm text-zinc-200 hover:bg-zinc-900"
+            >
+              {copied === "link" ? "Copied" : "Copy link"}
+            </button>
+            <button
+              onClick={openWaitlist}
+              className="rounded-xl bg-white px-5 py-2 text-sm font-semibold text-zinc-950 hover:bg-zinc-200"
+            >
+              Get Pro (Waitlist)
+            </button>
           </div>
-          <button
-            onClick={openWaitlist}
-            className="inline-flex items-center justify-center rounded-xl bg-white px-5 py-3 text-sm font-semibold text-zinc-950 hover:bg-zinc-200"
-          >
-            Get Pro (Waitlist)
-          </button>
         </div>
       </footer>
 
-      {/* Sticky Bottom CTA (safe conversion bump) */}
+      {/* Sticky Bottom CTA */}
       <div className="pointer-events-none fixed bottom-4 left-0 right-0 z-50">
         <div className="pointer-events-auto mx-4 flex max-w-6xl items-center justify-between gap-3 rounded-2xl border border-zinc-800 bg-zinc-950/85 px-4 py-3 shadow-2xl shadow-black/40 backdrop-blur sm:mx-auto">
           <div className="min-w-0">
             <div className="truncate text-sm font-semibold text-zinc-100">Nexus Nebula</div>
-            <div className="truncate text-xs text-zinc-400">
-              Waitlist is open • Gumroad drops soon
-            </div>
+            <div className="truncate text-xs text-zinc-400">Waitlist is open • Gumroad drops soon</div>
           </div>
 
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setShowFullDetails((v) => !v)}
+              onClick={() => copyToClipboard("link")}
               className="hidden rounded-xl border border-zinc-800 bg-zinc-900/30 px-3 py-2 text-xs text-zinc-200 hover:bg-zinc-900 sm:inline-flex"
-              aria-label="Toggle Full Details (Sticky CTA)"
             >
-              {showFullDetails ? "Full Details: ON" : "Simple View: ON"}
+              {copied === "link" ? "Copied" : "Copy link"}
             </button>
-
             <button
               onClick={openWaitlist}
               className="inline-flex items-center justify-center rounded-xl bg-white px-4 py-2 text-sm font-semibold text-zinc-950 hover:bg-zinc-200"
@@ -505,9 +465,7 @@ export default function Home() {
 
               <div className="mt-4 text-xs text-zinc-400">Request template</div>
               <div className="mt-1 flex items-center justify-between gap-2">
-                <div className="truncate text-sm text-zinc-300">
-                  “I’d like Nexus Nebula Pro access…”
-                </div>
+                <div className="truncate text-sm text-zinc-300">“I’d like Nexus Nebula Pro access…”</div>
                 <button
                   onClick={() => copyToClipboard("template")}
                   className="rounded-lg border border-zinc-800 bg-zinc-900/30 px-3 py-1.5 text-xs text-zinc-200 hover:bg-zinc-900"
@@ -515,15 +473,35 @@ export default function Home() {
                   {copied === "template" ? "Copied" : "Copy template"}
                 </button>
               </div>
+
+              <div className="mt-4 text-xs text-zinc-400">Share</div>
+              <div className="mt-1 flex items-center justify-between gap-2">
+                <div className="truncate text-sm text-zinc-300">Copy the site link</div>
+                <button
+                  onClick={() => copyToClipboard("link")}
+                  className="rounded-lg border border-zinc-800 bg-zinc-900/30 px-3 py-1.5 text-xs text-zinc-200 hover:bg-zinc-900"
+                >
+                  {copied === "link" ? "Copied" : "Copy link"}
+                </button>
+              </div>
             </div>
 
             <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
-              <a
-                href={mailtoHref}
-                className="inline-flex items-center justify-center rounded-xl bg-white px-4 py-2 text-sm font-semibold text-zinc-950 hover:bg-zinc-200"
-              >
-                Email Warren
-              </a>
+              {hasWaitlistForm ? (
+                <button
+                  onClick={openWaitlistForm}
+                  className="inline-flex items-center justify-center rounded-xl bg-white px-4 py-2 text-sm font-semibold text-zinc-950 hover:bg-zinc-200"
+                >
+                  Open Waitlist Form
+                </button>
+              ) : (
+                <a
+                  href={mailtoHref}
+                  className="inline-flex items-center justify-center rounded-xl bg-white px-4 py-2 text-sm font-semibold text-zinc-950 hover:bg-zinc-200"
+                >
+                  Email Warren
+                </a>
+              )}
 
               <button
                 onClick={closeWaitlist}
@@ -534,8 +512,9 @@ export default function Home() {
             </div>
 
             <p className="mt-4 text-xs text-zinc-500">
-              Tip: when Gumroad is ready, add <span className="text-zinc-300">NEXT_PUBLIC_GUMROAD_URL</span> and all “Get Pro”
-              buttons automatically route there.
+              Tip: when Gumroad is ready, set{" "}
+              <span className="text-zinc-300">NEXT_PUBLIC_GUMROAD_URL</span> and all “Get Pro” buttons will automatically route
+              there.
             </p>
           </div>
         </div>

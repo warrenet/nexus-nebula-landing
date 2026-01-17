@@ -13,12 +13,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://nexus-nebula-landing.vercel.app"),
   title: "Nexus Nebula — The AI Team you can watch work",
   description:
     "Nexus Nebula streams an AI 'team' through clear phases so non-technical humans can follow what’s happening. Built by warrenet.",
   applicationName: "Nexus Nebula",
   authors: [{ name: "warrenet" }],
-  keywords: ["AI", "agent", "multi-agent", "streaming", "workflow", "demo", "productivity", "Nexus Nebula"],
   openGraph: {
     title: "Nexus Nebula — The AI Team you can watch work",
     description:
